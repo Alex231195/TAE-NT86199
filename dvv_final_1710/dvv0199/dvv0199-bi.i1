@@ -1,0 +1,41 @@
+BUFFER-COPY {1} EXCEPT tipo-col conta MODULO user-lote mov moeda classif doc-origem num-processo trans-ap cod-esp cod-titulo 
+                       parcela des-desp cod-estabel serie nr-nota-fis nome-abrev regiao segmento familia movto nome-forn it-codigo desc-conta
+                       grupo-classe classe-item grupo-despesa desc-grup TO {2}.
+
+ASSIGN
+    {2}.tipo-col = SUBSTRING({1}.tipo-col,1,30)
+    {2}.conta = SUBSTRING({1}.conta,1,30)
+    {2}.modulo = SUBSTRING({1}.modulo,1,30)
+    {2}.user-lote = SUBSTRING({1}.user-lote,1,30)
+    {2}.mov = SUBSTRING({1}.mov,1,30)
+    {2}.moeda = SUBSTRING({1}.moeda,1,30)
+    {2}.classif = SUBSTRING({1}.classif,1,30)
+    {2}.doc-origem = SUBSTRING({1}.doc-origem,1,30)
+    {2}.num-processo = SUBSTRING({1}.num-processo,1,30)
+    {2}.trans-ap = SUBSTRING({1}.trans-ap,1,30)
+    {2}.cod-esp = SUBSTRING({1}.cod-esp,1,30)
+    {2}.cod-titulo = SUBSTRING({1}.cod-titulo,1,30)
+    {2}.parcela = SUBSTRING({1}.parcela,1,30)
+    {2}.des-desp = SUBSTRING({1}.des-desp,1,30)
+    {2}.cod-estabel = SUBSTRING({1}.cod-estabel,1,30)
+    {2}.serie = SUBSTRING({1}.serie,1,30)
+    {2}.nr-nota-fis = SUBSTRING({1}.nr-nota-fis,1,30)
+    {2}.nome-abrev = SUBSTRING({1}.nome-abrev,1,30)
+    {2}.regiao = SUBSTRING({1}.regiao,1,30)
+    {2}.segmento = SUBSTRING({1}.segmento,1,30)
+    {2}.familia = SUBSTRING({1}.familia,1,30)
+    {2}.movto = SUBSTRING({1}.movto,1,30)
+    {2}.nome-forn = SUBSTRING({1}.nome-forn,1,30)
+    {2}.it-codigo = SUBSTRING({1}.it-codigo,1,30)
+    {2}.desc-conta = SUBSTRING({1}.desc-conta,1,30)
+    {2}.grupo-classe = SUBSTRING({1}.grupo-classe,1,30)
+    {2}.classe-item = SUBSTRING({1}.classe-item,1,30)
+    {2}.grupo-despesa = SUBSTRING({1}.grupo-despesa,1,30)
+    {2}.desc-grup = SUBSTRING({1}.desc-grup,1,30)
+    {2}.char-1 = STRING({1}.cod-depos)
+    {2}.tip-oper-exp = {1}.tip-oper-exp
+    //{2}.char-2 = STRING({1}.cod-unid-negoc)
+    {2}.char-2 = STRING({1}.cod-unid-negoc-gerenc)
+    {2}.char-3 = STRING({1}.grupo-classe)
+    	.
+

@@ -1,0 +1,212 @@
+/*geraá∆o dos rateios das despesas por item*/    
+    FOR EACH tt-dvv_log_prov_desp:
+
+        IF dvv_log_provisao.origem_movto = "DVV MI"
+        OR dvv_log_provisao.origem_movto = "PDVV MI"
+		OR  dvv_log_provisao.origem_movto = "DVV-REM"    
+        OR  dvv_log_provisao.origem_movto = "PDVV_REM"	THEN DO:
+            FIND nota-fiscal WHERE
+                 nota-fiscal.cod-estabel = tt-dvv_log_prov_desp.cod_estabel AND
+                 nota-fiscal.serie       = "6"                               AND
+                 nota-fiscal.nr-nota-fis = tt-dvv_log_prov_desp.nr_proc_exp NO-LOCK NO-ERROR.
+            IF NOT AVAIL nota-fiscal THEN DO:
+                blk_series:
+                FOR EACH ser-estab NO-LOCK
+                    WHERE ser-estab.cod-estabel = tt-dvv_log_prov_desp.cod_estabel:
+                    FIND FIRST nota-fiscal WHERE
+                               nota-fiscal.cod-estabel = tt-dvv_log_prov_desp.cod_estabel AND
+                               nota-fiscal.serie       = ser-estab.serie AND
+                               nota-fiscal.nr-nota-fis = tt-dvv_log_prov_desp.nr_proc_exp NO-LOCK NO-ERROR.
+                    if avail nota-fiscal then
+                       leave blk_series.
+                END.
+            END.
+
+            FOR EACH it-nota-fisc OF nota-fiscal NO-LOCK,
+                FIRST ITEM WHERE
+                      ITEM.it-codigo = it-nota-fisc.it-codigo
+                BY it-nota-fisc.it-codigo:
+
+                FIND FIRST es_grupo_produto 
+                     WHERE es_grupo_produto.it_codigo = item.it-codigo NO-LOCK NO-ERROR.
+                IF NOT AVAIL es_grupo_produto THEN 
+                    FIND FIRST es_grupo_produto 
+                         WHERE es_grupo_produto.fm_codigo = ITEM.fm-cod-com NO-LOCK NO-ERROR.
+
+                CREATE tt-dvv_log_prov_desp_item.
+                BUFFER-COPY tt-dvv_log_prov_desp TO tt-dvv_log_prov_desp_item.
+
+                FIND fam-comerc WHERE
+                     fam-comerc.fm-cod-com = ITEM.fm-cod-com NO-LOCK NO-ERROR.
+
+                ASSIGN tt-dvv_log_prov_desp.fm_codigo = IF AVAIL fam-comerc THEN fam-comerc.descricao ELSE ITEM.fm-cod-com.
+
+                ASSIGN tt-dvv_log_prov_desp_item.it_codigo    = it-nota-fisc.it-codigo
+                       tt-dvv_log_prov_desp_item.grupo_item   = IF AVAIL es_grupo_produto THEN trim(es_grupo_produto.cod_grupo) + " - " + trim(es_grupo_produto.des_grupo) ELSE ""
+                       tt-dvv_log_prov_desp_item.val_desp_rat = (tt-dvv_log_prov_desp.vl_despesa * it-nota-fisc.vl-tot-item) / nota-fiscal.vl-tot-nota
+                       tt-dvv_log_prov_desp_item.fm_codigo    = IF AVAIL fam-comerc THEN fam-comerc.descricao ELSE ITEM.fm-cod-com.
+                FIND FIRST es_item_class_item WHERE
+                           es_item_class_item.it_codigo = item.it-codigo NO-LOCK NO-ERROR.
+                IF AVAIL es_item_class_item THEN
+                    FIND FIRST es_Class_item WHERE
+                               es_class_item.cod_class_item = es_item_class_item.cod_class_item NO-LOCK NO-ERROR.
+                IF AVAIL es_class_item THEN
+                    ASSIGN tt-dvv_log_prov_desp_item.grupo-classe = es_class_item.CLASS_item + "-" + substrin(es_class_item.CHAR_1,1,20).
+
+                FIND FIRST ped-venda WHERE
+                           ped-venda.nr-pedcli  = it-nota-fisc.nr-pedcli   and
+                           ped-venda.nome-abrev = it-nota-fisc.nome-ab-cli NO-LOCK NO-ERROR.
+        
+                assign tt-dvv_log_prov_desp_item.tipo_venda = "Normal".
+                
+                FIND es_natur_oper WHERE
+                     es_natur_oper.nat_operacao = ped-venda.nat-operacao NO-LOCK NO-ERROR.
+                IF AVAIL es_natur_oper AND es_natur_oper.tip_oper_exp = 2 THEN
+                    assign tt-dvv_log_prov_desp_item.tipo_venda = "Estoque".
+                
+                else do:
+                    IF AVAIL es_natur_oper AND es_natur_oper.tip_oper_exp = 3 THEN
+                        assign tt-dvv_log_prov_desp_item.tipo_venda = "Venda".
+                end.
+				
+				IF INDEX(dvv_log_provisao.origem_movto, "REM") > 0 THEN
+                    ASSIGN tt-dvv_log_prov_desp_item.tipo_venda = "Consignada".
+                        
+                if dvv_log_provisao.cod_estabel = "002" THEN DO:
+                     ASSIGN p-data-real = dvv_log_provisao.dt_provisao.
+                     IF dvv_log_provisao.situacao = 2 THEN
+                         ASSIGN p-data-real = dvv_log_provisao.dt_lancto_provis.
+                     IF dvv_log_provisao.situacao = 4 THEN
+                         ASSIGN p-data-real = dvv_log_provisao.dt_lancto_estorno.
+        
+                     run cdp/cd0812.p (input  0, /*moeda realizado*/
+                                       input  15, /*0*/
+                                       input  tt-dvv_log_prov_desp_item.val_desp_rat, /*valor realizado*/
+                                       input  p-data-real,
+                                       output de-valor-conv).
+                     if  de-valor-conv <> ? then
+                         ASSIGn tt-dvv_log_prov_desp_item.val_desp_euro_it = de-valor-conv.
+                END.
+                
+                assign tt-dvv_log_prov_desp_item.cod_incoterm = if nota-fiscal.cidade-cif <> "" then "Cif" else "Fob".
+                                               
+                        
+
+                /*aqui*/
+            END.
+        END. 
+        ELSE DO:
+            
+            assign i-cod-estabel = tt-dvv_log_prov_desp.cod_estabel.
+            
+            IF NOT CAN-FIND(FIRST proc-ped-ent
+                                WHERE proc-ped-ent.cod-estabel = tt-dvv_log_prov_desp.cod_estabel
+                                  AND proc-ped-ent.nr-proc-exp = tt-dvv_log_prov_desp.nr_proc_exp) THEN
+                ASSIGN i-cod-estabel = IF tt-dvv_log_prov_desp.cod_estabel = "001" THEN "002" ELSE tt-dvv_log_prov_desp.cod_estabel.
+            empty temp-table tt-valores.    
+            CREATE tt-valores.
+            ASSIGN tt-valores.cod-estabel = i-cod-estabel
+                   tt-valores.nr-proc-exp = tt-dvv_log_prov_desp.nr_proc_exp.
+
+            RUN cxbo/bocx185.p PERSISTENT SET h-bocx185.
+
+            RUN UpdatePriceWeight IN h-bocx185 (INPUT-OUTPUT TABLE tt-valores).
+        
+            DELETE PROCEDURE h-bocx185.
+        
+            FIND FIRST tt-valores NO-LOCK NO-ERROR.
+
+
+            if can-find (first proc-ped-ent NO-LOCK
+                         WHERE proc-ped-ent.cod-estabel = i-cod-estabel
+                           AND proc-ped-ent.nr-proc-exp = tt-dvv_log_prov_desp.nr_proc_exp) then do:
+                
+                FOR EACH proc-ped-ent NO-LOCK
+                  WHERE proc-ped-ent.cod-estabel = i-cod-estabel
+                    AND proc-ped-ent.nr-proc-exp = tt-dvv_log_prov_desp.nr_proc_exp,
+                    FIRST ITEM WHERE
+                          ITEM.it-codigo = proc-ped-ent.it-codigo
+                    BY proc-ped-ent.it-codigo:
+        
+                    FIND FIRST es_grupo_produto 
+                         WHERE es_grupo_produto.it_codigo = item.it-codigo NO-LOCK NO-ERROR.
+                    IF NOT AVAIL es_grupo_produto THEN 
+                        FIND FIRST es_grupo_produto 
+                             WHERE es_grupo_produto.fm_codigo = ITEM.fm-cod-com NO-LOCK NO-ERROR.
+        
+                    CREATE tt-dvv_log_prov_desp_item.
+                    BUFFER-COPY tt-dvv_log_prov_desp TO tt-dvv_log_prov_desp_item.
+                    find first processo-exp where
+                               processo-exp.cod-estabel = proc-ped-ent.cod-estabel and
+                               processo-exp.nr-proc-exp = proc-ped-ent.nr-proc-exp no-lock no-error.
+        
+                    FIND fam-comerc WHERE
+                         fam-comerc.fm-cod-com = ITEM.fm-cod-com NO-LOCK NO-ERROR.
+        
+                    ASSIGN tt-dvv_log_prov_desp.fm_codigo = IF AVAIL fam-comerc THEN fam-comerc.descricao ELSE ITEM.fm-cod-com.
+        
+                    ASSIGN tt-dvv_log_prov_desp_item.it_codigo    = ITEM.it-codigo
+                           tt-dvv_log_prov_desp_item.grupo_item   = IF AVAIL es_grupo_produto THEN trim(es_grupo_produto.cod_grupo) + " - " + trim(es_grupo_produto.des_grupo) ELSE ""
+                           tt-dvv_log_prov_desp_item.val_desp_rat = (tt-dvv_log_prov_desp.vl_despesa * (proc-ped-ent.vl-preuni * proc-ped-ent.quantidade[1])) / tt-valores.vl-tot-liq
+                           tt-dvv_log_prov_desp_item.fm_codigo    = IF AVAIL fam-comerc THEN fam-comerc.descricao ELSE ITEM.fm-cod-com.
+        
+                    FIND FIRST es_item_class_item WHERE
+                               es_item_class_item.it_codigo = item.it-codigo NO-LOCK NO-ERROR.
+                    IF AVAIL es_item_class_item THEN
+                        FIND FIRST es_Class_item WHERE
+                                   es_class_item.cod_class_item = es_item_class_item.cod_class_item NO-LOCK NO-ERROR.
+                    IF AVAIL es_class_item THEN
+                        ASSIGN tt-dvv_log_prov_desp_item.grupo-classe = es_class_item.CLASS_item + "-" + substrin(es_class_item.CHAR_1,1,20).
+                        
+                    FIND FIRST ped-venda WHERE
+                               ped-venda.nr-pedcli  = proc-ped-ent.nr-proc-exp and
+                               ped-venda.nome-abrev = "NITRO GMBH" NO-LOCK NO-ERROR.
+              
+                    assign tt-dvv_log_prov_desp_item.tipo_venda = "Normal".
+                    
+                    FIND es_natur_oper WHERE
+                         es_natur_oper.nat_operacao = ped-venda.nat-operacao NO-LOCK NO-ERROR.
+                    IF AVAIL es_natur_oper AND es_natur_oper.tip_oper_exp = 2 THEN DO:
+                        FIND es_itinerario WHERE
+                             es_itinerario.cod_itiner = tt-valores.cod-itiner NO-LOCK NO-ERROR.
+                        IF AVAIL es_itinerario THEN DO:
+                            FIND deposito WHERE
+                                 deposito.cod-depos = es_itinerario.cod_depos NO-LOCK NO-ERROR.
+                            IF AVAIL deposito THEN DO:
+                                ASSIGN tt-dvv_log_prov_desp_item.reg-seg = deposito.nome.
+                            END.
+                        END.
+                        assign tt-dvv_log_prov_desp_item.tipo_venda = "Estoque".
+                    END.
+                    else do:
+                        IF AVAIL es_natur_oper AND es_natur_oper.tip_oper_exp = 3 THEN
+                            assign tt-dvv_log_prov_desp_item.tipo_venda = "Venda".
+                    end.
+                    
+                    if dvv_log_provisao.cod_estabel = "002" THEN DO:
+                         ASSIGN p-data-real = dvv_log_provisao.dt_provisao.
+                         IF dvv_log_provisao.situacao = 2 THEN
+                             ASSIGN p-data-real = dvv_log_provisao.dt_lancto_provis.
+                         IF dvv_log_provisao.situacao = 4 THEN
+                             ASSIGN p-data-real = dvv_log_provisao.dt_lancto_estorno.
+              
+                         run cdp/cd0812.p (input  0, /*moeda realizado*/
+                                           input  15, /*0*/
+                                           input  tt-dvv_log_prov_desp_item.val_desp_rat, /*valor realizado*/
+                                           input  p-data-real,
+                                           output de-valor-conv).
+                         if  de-valor-conv <> ? then
+                             ASSIGn tt-dvv_log_prov_desp_item.val_desp_euro_it = de-valor-conv.
+                    END.
+                    assign tt-dvv_log_prov_desp_item.cod_incoterm = processo-exp.cod-incoterm.
+                END.
+            end.
+            else do:
+                            
+                    CREATE tt-dvv_log_prov_desp_item.
+                    BUFFER-COPY tt-dvv_log_prov_desp TO tt-dvv_log_prov_desp_item.
+                    assign tt-dvv_log_prov_desp_item.it_codigo  = "Registro do Item n∆o relacionado ao process - EX0190(PROC-PED-ENT)".
+
+            end.
+        END.
+    END.
